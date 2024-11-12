@@ -3,14 +3,15 @@ import tkinter as tk
 from tkinter import ttk
 from pyusbtin.usbtin import USBtin
 from table_translator import *
+from gui import *
 from queue import Queue, Empty
 import tkinter.font as tkFont
 
 class CANMonitorApp:
-    def __init__(self, master):
+    def __init__(self, master, usbtin):
         self.master = master
         self.master.title("BUDERUS CAN Monitor Application")
-
+        self.usbtin = usbtin
         # Dictionary to store messages by idx
         self.messages_dict = {}
         self.update_queue = Queue()  # Queue for safely passing messages
@@ -22,14 +23,11 @@ class CANMonitorApp:
             columns=("S_ID", "r/w", "CAN_ID", "INDEX", "KM200_ID", "MAX", "MIN", "FORMAT", "DATA", "VALUE", "UNIT", "DESCRIPTION"),
             show="headings"  # Only show defined columns
         )
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        master.grid_rowconfigure(0, weight=1)
+        self.tree.grid(row=1, column=0, columnspan= 2, sticky="nsew")
+        master.grid_rowconfigure(1, weight=1)
         master.grid_columnconfigure(0, weight=1)
-        
-        # Configure the grid to make the Treeview expand when the window resizes
-        master.grid_rowconfigure(0, weight=1)
         master.grid_columnconfigure(0, weight=1)
-
+        master.grid_columnconfigure(1, weight=1)
         #Heading configuration
         self.tree.heading("S_ID", text="Msg session Id")
         self.tree.heading("r/w", text="r/w")
@@ -44,8 +42,19 @@ class CANMonitorApp:
         self.tree.heading("UNIT", text="Unit")
         self.tree.heading("DESCRIPTION", text="Description")
         self.update_timer()  # Start the periodic refresh loop
+        self.refresh_frame = 0       
+        # Add vertical scrollbar
+        scrollbar = ttk.Scrollbar(master, orient="vertical", command=self.tree.yview)
+        scrollbar.grid(row=1, column=2, sticky="ns")
+        self.tree.configure(yscrollcommand=scrollbar.set)
+     # Create a button and set its command to the function
+        button = tk.Button(master, text="Read Temperature", command=lambda: on_button_click(usbtin))
+        button.grid(row=0, column=0, padx=20, pady=20, stick="nw")  # Use grid instead of pack
         
-        
+      # Create a button and set its command to the function
+        button_adjust_columns = tk.Button(master, text="Adjust columns", command=self.fit_columns_to_content)
+        button_adjust_columns.grid(row=0, column=1, padx=20, pady=20, stick="nw")  # Use grid instead of pack
+               
     def update_or_add_message(self, msg):
         """
         Updates or adds a message to the dictionary, but does not interact with the Treeview.
@@ -58,7 +67,7 @@ class CANMonitorApp:
         details = {
             "INDEX": "N/A", 
             "KM200_ID": "N/A", 
-            "CAN_ID": "N/A",
+            "CAN_ID": can_id,
             "MAX": "N/A", 
             "MIN": "N/A", 
             "FORMAT": "N/A",                          
@@ -180,7 +189,9 @@ class CANMonitorApp:
 
             except Empty:
                 break
-            self.fit_columns_to_content()
+            self.refresh_frame+=1
+            if self.refresh_frame == 2:
+                self.fit_columns_to_content()
 
     # Logging function to process and display each received message
     def log_data(self, msg):
@@ -188,7 +199,8 @@ class CANMonitorApp:
         Log CAN messages and update the dictionary.
         This method will be called by the USBtin message listener.
         """
-
+        if msg ==0xdabbfe0:
+            print("hahahhahahahahhahahahahahahahhaha")
         print('Received:', hex(msg.mid))
         self.update_or_add_message(msg)
         
@@ -198,7 +210,7 @@ class CANMonitorApp:
         Periodically calls `update_treeview` every second using Tkinter’s `after`.
         """
         self.update_treeview()
-        self.master.after(1000, self.update_timer)
+        self.master.after(2000, self.update_timer)
 
     def fit_columns_to_content(self):
             """Adjust Treeview column widths to fit the content, with a minimum size for each column."""
@@ -236,9 +248,10 @@ class CANMonitorApp:
 # Main function to initialize the USBtin connection and Tkinter GUI loop
 async def main():
     root = tk.Tk()
-    app = CANMonitorApp(root)
-    
     usbtin = USBtin()
+    app = CANMonitorApp(root, usbtin)
+    
+
 
     try:
         usbtin.connect("COM3")  # Make sure 'COM3' is the correct port
